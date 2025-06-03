@@ -174,7 +174,7 @@ class DocumentSource(str, Enum):
     FIREFLIES = "fireflies"
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
-
+    ONEDRIVE = "onedrive"
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
 

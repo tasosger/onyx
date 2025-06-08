@@ -390,6 +390,7 @@ export enum ValidSources {
   Egnyte = "egnyte",
   Airtable = "airtable",
   Gitbook = "gitbook",
+  OneDrive = "onedrive",
 }
 
 export const validAutoSyncSources = [
@@ -416,3 +417,11 @@ export const oauthSupportedSources: ConfigurableSources[] = [
 ];
 
 export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
+
+export interface OneDriveConfig {
+  include_shared_files: boolean;
+  include_my_files: boolean;
+  folder_paths?: string[];
+  exclude_patterns?: string[];
+  sync_frequency?: number;
+}

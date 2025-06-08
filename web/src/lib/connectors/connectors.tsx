@@ -1249,6 +1249,48 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
+  onedrive: {
+    description: "Configure OneDrive connector",
+    values: [
+      {
+        type: "checkbox",
+        label: "Include shared files",
+        name: "include_shared_files",
+        description: "Index files that have been shared with you",
+        default: false,
+      },
+      {
+        type: "checkbox",
+        label: "Include my files",
+        name: "include_my_files",
+        description: "Index files from your personal OneDrive",
+        default: true,
+      }
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: "Folder paths",
+        name: "folder_paths",
+        description: "Specific folder paths to index (leave empty to index all)",
+        optional: true,
+      },
+      {
+        type: "list",
+        label: "Exclude patterns",
+        name: "exclude_patterns",
+        description: "File patterns to exclude from indexing",
+        optional: true,
+      },
+      {
+        type: "number",
+        label: "Sync frequency (hours)",
+        name: "sync_frequency",
+        description: "How often to check for changes",
+        default: 24,
+      }
+    ],
+  },
 };
 export function createConnectorInitialValues(
   connector: ConfigurableSources

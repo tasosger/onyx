@@ -21,7 +21,6 @@ def test_build_slim_document(mock_api_client):
 
 
 def test_connector_list_documents_slim(one_drive_connector: OneDriveConnector, mock_api_client):
-    # Setup mock
     mock_api_client.get.return_value = MOCK_FILES_RESPONSE
     
     docs = list(one_drive_connector.list_documents_slim())
@@ -36,7 +35,6 @@ def test_connector_list_documents_slim(one_drive_connector: OneDriveConnector, m
 
 
 def test_connector_list_folder_documents_slim(one_drive_connector: OneDriveConnector, mock_api_client):
-    # Setup mock
     mock_api_client.get.return_value = MOCK_FILES_RESPONSE
     
     docs = list(one_drive_connector.list_folder_documents_slim(TEST_FOLDER_ID))

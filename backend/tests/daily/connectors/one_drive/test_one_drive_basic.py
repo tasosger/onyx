@@ -35,10 +35,9 @@ def one_drive_connector(mock_api_client) -> OneDriveConnector:
 
 
 def test_load_from_state(one_drive_connector: OneDriveConnector, mock_api_client) -> None:
-    # Setup mock responses
     mock_api_client.get.side_effect = [
-        MOCK_FILES_RESPONSE,  # For /me/drive/root/children
-        MOCK_SHARED_FILES_RESPONSE  # For /me/drive/sharedWithMe
+        MOCK_FILES_RESPONSE,
+        MOCK_SHARED_FILES_RESPONSE
     ]
     
     docs = one_drive_connector.load_from_state()
@@ -47,7 +46,6 @@ def test_load_from_state(one_drive_connector: OneDriveConnector, mock_api_client
     doc_list = list(docs)
     assert len(doc_list) > 0
     
-    # Verify API calls
     assert mock_api_client.get.call_count >= 1
     
     for doc in doc_list:
@@ -60,7 +58,6 @@ def test_poll_source(one_drive_connector: OneDriveConnector, mock_api_client) ->
     current = datetime.now(timezone.utc)
     one_day_ago = current.timestamp() - (24 * 60 * 60)
     
-    # Setup mock response
     mock_api_client.get.return_value = {
         "value": [
             {
@@ -79,7 +76,6 @@ def test_poll_source(one_drive_connector: OneDriveConnector, mock_api_client) ->
     doc_list = list(docs)
     assert len(doc_list) > 0
     
-    # Verify API calls
     assert mock_api_client.get.call_count >= 1
     
     for doc in doc_list:

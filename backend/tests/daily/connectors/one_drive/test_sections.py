@@ -14,10 +14,9 @@ from .mock_data import MOCK_FILE, MOCK_FILE_CONTENT
 
 @patch("onyx.connectors.one_drive.section_extraction.extract_file_text")
 def test_extract_sections_from_file(mock_extract_text, mock_api_client):
-    # Setup mocks
     mock_api_client.get.side_effect = [
-        MOCK_FILE,  # For file metadata
-        MOCK_FILE_CONTENT.encode('utf-8')  # For file content
+        MOCK_FILE,  
+        MOCK_FILE_CONTENT.encode('utf-8')  
     ]
     mock_extract_text.return_value = MOCK_FILE_CONTENT
     
@@ -32,10 +31,9 @@ def test_extract_sections_from_file(mock_extract_text, mock_api_client):
 
 @patch("onyx.connectors.one_drive.section_extraction.extract_file_text")
 def test_extract_sections_from_document(mock_extract_text, mock_api_client):
-    # Setup mocks
     mock_api_client.get.side_effect = [
-        MOCK_FILE,  # For file metadata
-        MOCK_FILE_CONTENT.encode('utf-8')  # For file content
+        MOCK_FILE, 
+        MOCK_FILE_CONTENT.encode('utf-8') 
     ]
     mock_extract_text.return_value = MOCK_FILE_CONTENT
     

@@ -1,37 +1,33 @@
 import os
+import pytest
+from unittest.mock import patch, Mock
+
 from onyx.connectors.one_drive.client import OneDriveApiClient
+from .mock_data import MOCK_USER, MOCK_FILES_RESPONSE, MOCK_TOKEN_RESPONSE
 
-def test_onedrive_client():
-    """Test basic OneDrive client functionality."""
-    print("\nChecking environment variables:")
-    required_vars = [
-        "ONEDRIVE_CLIENT_ID",
-        "ONEDRIVE_CLIENT_SECRET",
-        "ONEDRIVE_TENANT_ID",
-        "ONEDRIVE_REFRESH_TOKEN",
+@patch("onyx.connectors.one_drive.client.requests.post")
+@patch("onyx.connectors.one_drive.client.requests.request")
+def test_onedrive_client(mock_request, mock_post):
+    mock_post.return_value.status_code = 200
+    mock_post.return_value.json.return_value = MOCK_TOKEN_RESPONSE
+
+    mock_request.side_effect = [
+        Mock(ok=True, json=lambda: MOCK_USER),
+        Mock(ok=True, json=lambda: MOCK_FILES_RESPONSE)
     ]
-    
-    for var in required_vars:
-        value = os.environ.get(var, '')
-        print(f"{var}: {'✓ Set' if value else '✗ Missing'}")
-        if not value:
-            raise ValueError(f"Missing required environment variable: {var}")
 
-    # Initialize client
     print("\nInitializing OneDrive client...")
     client = OneDriveApiClient(
-        client_id=os.environ["ONEDRIVE_CLIENT_ID"],
-        client_secret=os.environ["ONEDRIVE_CLIENT_SECRET"],
-        tenant_id=os.environ["ONEDRIVE_TENANT_ID"],
-        refresh_token=os.environ["ONEDRIVE_REFRESH_TOKEN"]
+        client_id="test_client_id",
+        client_secret="test_client_secret",
+        tenant_id="test_tenant_id",
+        refresh_token="test_refresh_token"
     )
 
-    # Test connection
     print("\nTesting connection...")
     user_info = client.get("/me")
     print(f"Connected as: {user_info.get('displayName', 'Unknown')} ({user_info.get('mail', 'No email')})")
 
-    # List files
     print("\nListing files...")
     files = client.get("/me/drive/root/children")
     print(f"Found {len(files.get('value', []))} files in root")

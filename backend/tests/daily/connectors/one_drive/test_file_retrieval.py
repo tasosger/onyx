@@ -7,32 +7,26 @@ from .mock_data import MOCK_FILE, MOCK_FILE_CONTENT
 
 
 def test_get_file_content(mock_api_client):
-    # Setup mock
     mock_api_client.get.return_value = MOCK_FILE_CONTENT.encode('utf-8')
     
-    # Test getting file content
     content = get_file_content(
         client=mock_api_client,
         file_id=MOCK_FILE["id"],
         drive_id=MOCK_FILE["parentReference"]["driveId"]
     )
     
-    # Verify API call
     mock_api_client.get.assert_called_with(
         f"/me/drive/items/{MOCK_FILE['id']}/content",
         stream=True
     )
     
-    # Verify content
     assert content == MOCK_FILE_CONTENT.encode('utf-8')
 
 
 def test_get_file_content_error(mock_api_client):
-    # Simulate API error
     error_msg = "Failed to get file"
     mock_api_client.get.side_effect = Exception(error_msg)
     
-    # Test error handling
     with pytest.raises(Exception) as exc_info:
         content = get_file_content(
             client=mock_api_client,

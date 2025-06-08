@@ -4,7 +4,7 @@ from unittest.mock import patch, Mock
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.one_drive.connector import OneDriveConnector
 from onyx.connectors.one_drive.client import OneDriveApiClient
-from onyx.connectors.one_drive.errors import OneDriveClientRequestFailedError
+from onyx.connectors.one_drive.errors import OneDriveClientRequestFailedError, OneDriveRequestError
 from .mock_data import MOCK_TOKEN_RESPONSE
 
 from .consts_and_utils import TEST_CREDENTIALS
@@ -44,7 +44,6 @@ def test_refresh_token(mock_post, mock_api_client):
 def test_validate_credentials(mock_request, mock_post, mock_api_client):
     connector = OneDriveConnector()
     
-    # Test with valid credentials
     connector.load_credentials({
         "token": "valid_token",
         "refresh_token": "valid_refresh_token",
@@ -71,8 +70,13 @@ def test_invalid_credentials(mock_post, mock_api_client):
     
     mock_post.return_value.status_code = 400
     mock_post.return_value.text = "Invalid credentials"
+    mock_post.return_value.json.return_value = {
+        "error": {
+            "message": "Invalid credentials"
+        }
+    }
     
-    with pytest.raises(OneDriveClientRequestFailedError) as exc_info:
+    with pytest.raises(OneDriveRequestError) as exc_info:
         connector.update_credentials(invalid_creds)
     
     assert exc_info.value.status_code == 400
@@ -109,7 +113,6 @@ def test_refresh_token_flow(mock_request, mock_post, mock_api_client):
         "tenant_id": "test_tenant_id"
     })
     
-    # First call succeeds
     mock_request.return_value = Mock(ok=True, json=lambda: {"id": "test_user"})
     mock_post.return_value.status_code = 200
     mock_post.return_value.json.return_value = MOCK_TOKEN_RESPONSE
@@ -117,7 +120,6 @@ def test_refresh_token_flow(mock_request, mock_post, mock_api_client):
     response = connector.client.get("/me")
     assert response == {"id": "test_user"}
     
-    # Second call fails with 401, triggering token refresh
     mock_request.side_effect = [
         Mock(ok=False, status_code=401, text="Token expired"),
         Mock(ok=True, json=lambda: {"id": "test_user"})

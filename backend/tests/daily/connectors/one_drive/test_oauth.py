@@ -3,7 +3,8 @@ from unittest.mock import patch, Mock
 
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.one_drive.connector import OneDriveConnector
-from onyx.connectors.one_drive.client import OneDriveApiClient, OneDriveClientRequestFailedError
+from onyx.connectors.one_drive.client import OneDriveApiClient
+from onyx.connectors.one_drive.errors import OneDriveClientRequestFailedError
 from .mock_data import MOCK_TOKEN_RESPONSE
 
 from .consts_and_utils import TEST_CREDENTIALS

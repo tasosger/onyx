@@ -6,7 +6,7 @@ from onyx.connectors.models import Document, TextSection, BasicExpertInfo, Conne
 from onyx.configs.constants import DocumentSource
 from onyx.file_processing.extract_file_text import extract_file_text
 
-from .client import OneDriveApiClient, OneDriveClientRequestFailedError
+from .client import OneDriveApiClient
 from .constants import SCOPE, AUTH_URL, TOKEN_URL
 from .doc_conversion import convert_drive_item_to_document, build_slim_document
 from .file_retrieval import get_all_files_in_drive
@@ -17,7 +17,8 @@ from .errors import (
     OneDriveNotFoundError,
     OneDriveRateLimitError,
     OneDriveRequestError,
-    OneDriveServerError
+    OneDriveServerError,
+    OneDriveClientRequestFailedError
 )
 
 

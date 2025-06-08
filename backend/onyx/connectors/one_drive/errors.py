@@ -36,4 +36,8 @@ class OneDriveRequestError(OneDriveError):
 
 
 class OneDriveServerError(OneDriveError):
+    pass
+
+
+class OneDriveClientRequestFailedError(OneDriveRequestError):
     pass 

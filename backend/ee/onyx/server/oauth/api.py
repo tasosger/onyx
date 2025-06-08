@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from ee.onyx.server.oauth.api_router import router
 from ee.onyx.server.oauth.confluence_cloud import ConfluenceCloudOAuth
 from ee.onyx.server.oauth.google_drive import GoogleDriveOAuth
+from ee.onyx.server.oauth.one_drive import OneDriveOAuth
 from ee.onyx.server.oauth.slack import SlackOAuth
 from onyx.auth.users import current_admin_user
 from onyx.configs.app_configs import DEV_MODE
@@ -65,6 +66,14 @@ def prepare_authorization_request(
         else:
             oauth_url = GoogleDriveOAuth.generate_dev_oauth_url(oauth_state)
         session = GoogleDriveOAuth.session_dump_json(
+            email=user.email, redirect_on_success=redirect_on_success
+        )
+    elif connector == DocumentSource.ONEDRIVE:
+        if not DEV_MODE:
+            oauth_url = OneDriveOAuth.generate_oauth_url(oauth_state)
+        else:
+            oauth_url = OneDriveOAuth.generate_dev_oauth_url(oauth_state)
+        session = OneDriveOAuth.session_dump_json(
             email=user.email, redirect_on_success=redirect_on_success
         )
     else:

@@ -7,7 +7,7 @@ import json
 from urllib.parse import urljoin
 
 from .constants import RETRYABLE_STATUSES, TOKEN_URL, SCOPE, AUTH_URL
-from .connector import (
+from .errors import (
     OneDriveAuthError,
     OneDriveCredentialsError,
     OneDriveNotFoundError,

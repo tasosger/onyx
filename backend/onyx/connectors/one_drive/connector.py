@@ -11,6 +11,46 @@ from .constants import SCOPE, AUTH_URL, TOKEN_URL
 from .doc_conversion import convert_drive_item_to_document, build_slim_document
 from .file_retrieval import get_all_files_in_drive
 
+
+class OneDriveError(Exception):
+    pass
+
+
+class OneDriveAuthError(OneDriveError):
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+class OneDriveCredentialsError(OneDriveError):
+    def __init__(self, message: str, missing_fields: List[str]):
+        self.missing_fields = missing_fields
+        super().__init__(f"{message}: {', '.join(missing_fields)}")
+
+
+class OneDriveNotFoundError(OneDriveError):
+    def __init__(self, resource_type: str, resource_id: str):
+        super().__init__(f"{resource_type} not found: {resource_id}")
+
+
+class OneDriveRateLimitError(OneDriveError):
+    def __init__(self, retry_after: Optional[int] = None):
+        self.retry_after = retry_after
+        message = "Rate limit exceeded"
+        if retry_after:
+            message += f". Retry after {retry_after} seconds"
+        super().__init__(message)
+
+
+class OneDriveRequestError(OneDriveError):
+    def __init__(self, status_code: int, message: str):
+        self.status_code = status_code
+        super().__init__(f"Request failed with status {status_code}: {message}")
+
+
+class OneDriveServerError(OneDriveError):
+    pass
+
+
 class OneDriveConnector(LoadConnector):
     def __init__(
         self,
@@ -58,7 +98,6 @@ class OneDriveConnector(LoadConnector):
         if not self.client:
             raise ConnectorMissingCredentialError("Client not initialized - call load_credentials first")
         try:
-            # Test API access by making a simple request
             self.client.get("/me")
         except OneDriveClientRequestFailedError as e:
             if e.status_code == 401:
@@ -70,7 +109,6 @@ class OneDriveConnector(LoadConnector):
                 raise
 
     def validate(self) -> None:
-        """Alias for validate_connector_settings for backward compatibility."""
         self.validate_connector_settings()
 
     def _process_drive_item(self, item: Dict[str, Any]) -> Optional[Document]:
@@ -125,7 +163,6 @@ class OneDriveConnector(LoadConnector):
             raise OneDriveClientRequestFailedError(500, str(e))
 
     def list_documents(self) -> Generator[Document, None, None]:
-        """List all documents in the user's OneDrive."""
         if not self.client:
             raise ConnectorMissingCredentialError("Client not initialized - call load_credentials first")
 
@@ -140,7 +177,6 @@ class OneDriveConnector(LoadConnector):
             raise OneDriveClientRequestFailedError(500, str(e))
 
     def list_folder_documents(self, folder_id: str) -> Generator[Document, None, None]:
-        """List all documents in a specific folder."""
         if not self.client:
             raise ConnectorMissingCredentialError("Client not initialized - call load_credentials first")
 
@@ -155,7 +191,6 @@ class OneDriveConnector(LoadConnector):
             raise OneDriveClientRequestFailedError(500, str(e))
 
     def get_document(self, file_id: str) -> Document:
-        """Get a specific document by ID."""
         if not self.client:
             raise ConnectorMissingCredentialError("Client not initialized - call load_credentials first")
 
@@ -172,7 +207,6 @@ class OneDriveConnector(LoadConnector):
             raise OneDriveClientRequestFailedError(500, str(e))
 
     def list_documents_slim(self) -> Generator[Document, None, None]:
-        """List all documents in the user's OneDrive without content."""
         if not self.client:
             raise ConnectorMissingCredentialError("Client not initialized - call load_credentials first")
 
@@ -188,7 +222,6 @@ class OneDriveConnector(LoadConnector):
             raise OneDriveClientRequestFailedError(500, str(e))
 
     def list_folder_documents_slim(self, folder_id: str) -> Generator[Document, None, None]:
-        """List all documents in a specific folder without content."""
         if not self.client:
             raise ConnectorMissingCredentialError("Client not initialized - call load_credentials first")
 

@@ -7,11 +7,14 @@ import json
 from urllib.parse import urljoin
 
 from .constants import RETRYABLE_STATUSES, TOKEN_URL, SCOPE, AUTH_URL
-
-class OneDriveClientRequestFailedError(Exception):
-    def __init__(self, status_code: int, message: str):
-        self.status_code = status_code
-        super().__init__(f"OneDrive Client request failed with status {status_code}: {message}")
+from .connector import (
+    OneDriveAuthError,
+    OneDriveCredentialsError,
+    OneDriveNotFoundError,
+    OneDriveRateLimitError,
+    OneDriveRequestError,
+    OneDriveServerError
+)
 
 class OneDriveApiClient:
     def __init__(
@@ -25,6 +28,20 @@ class OneDriveApiClient:
         max_retries: int = 3,
         backoff_factor: float = 0.5,
     ):
+        # Validate required credentials
+        missing_fields = []
+        if not client_id:
+            missing_fields.append("client_id")
+        if not client_secret:
+            missing_fields.append("client_secret")
+        if not tenant_id:
+            missing_fields.append("tenant_id")
+        if not refresh_token and not access_token:
+            missing_fields.append("refresh_token or access_token")
+        
+        if missing_fields:
+            raise OneDriveCredentialsError("Missing required credentials", missing_fields)
+
         self.client_id = client_id
         self.client_secret = client_secret
         self.tenant_id = tenant_id
@@ -39,7 +56,11 @@ class OneDriveApiClient:
 
     def _refresh_access_token(self) -> None:
         if not all([self.client_id, self.client_secret, self.tenant_id, self.refresh_token]):
-            raise OneDriveClientRequestFailedError(401, "Missing OAuth2 credentials")
+            raise OneDriveCredentialsError(
+                "Missing OAuth2 credentials for token refresh",
+                [f for f in ["client_id", "client_secret", "tenant_id", "refresh_token"]
+                 if not getattr(self, f)]
+            )
 
         data = {
             "client_id": self.client_id,
@@ -49,20 +70,26 @@ class OneDriveApiClient:
             "scope": " ".join(SCOPE)
         }
 
-        print("\nRefreshing token with data:", data)
-        response = requests.post(TOKEN_URL, data=data)
-        print(f"Token refresh response status: {response.status_code}")
-        print(f"Token refresh response: {response.text}")
-        
-        if response.status_code != 200:
-            raise OneDriveClientRequestFailedError(
-                response.status_code,
-                f"Failed to refresh access token: {response.text}"
-            )
+        try:
+            response = requests.post(TOKEN_URL, data=data)
+            
+            if response.status_code == 429:
+                retry_after = response.headers.get("Retry-After")
+                raise OneDriveRateLimitError(int(retry_after) if retry_after else None)
+            
+            if response.status_code != 200:
+                error_data = response.json()
+                error_msg = error_data.get("error", {}).get("message", response.text)
+                if response.status_code == 401:
+                    raise OneDriveAuthError(error_msg)
+                raise OneDriveRequestError(response.status_code, error_msg)
 
-        token_data = response.json()
-        self.access_token = token_data["access_token"]
-        self.refresh_token = token_data["refresh_token"]
+            token_data = response.json()
+            self.access_token = token_data["access_token"]
+            self.refresh_token = token_data["refresh_token"]
+
+        except requests.exceptions.RequestException as e:
+            raise OneDriveServerError(f"Failed to refresh token: {str(e)}")
 
     def _build_headers(self) -> Dict[str, str]:
         return {
@@ -84,12 +111,6 @@ class OneDriveApiClient:
 
         while retries <= self.max_retries:
             try:
-                print(f"\nMaking request to {url}")
-                print(f"Method: {method}")
-                print(f"Headers: {headers}")
-                print(f"Params: {params}")
-                print(f"JSON: {json}")
-                
                 response = requests.request(
                     method=method,
                     url=url,
@@ -98,22 +119,28 @@ class OneDriveApiClient:
                     stream=stream,
                     json=json
                 )
-
-                print(f"Response status: {response.status_code}")
-                print(f"Response headers: {response.headers}")
                 
                 if stream and response.ok:
                     return io.BytesIO(response.content)
 
                 if response.status_code == 401 and self.refresh_token:
-                    print("Got 401, refreshing token...")
                     self._refresh_access_token()
                     headers = self._build_headers()
                     retries += 1
                     continue
 
+                if response.status_code == 429:
+                    retry_after = response.headers.get("Retry-After")
+                    if retries < self.max_retries:
+                        sleep_time = int(retry_after) if retry_after else (
+                            self.backoff_factor * (2 ** retries) + random.uniform(0, 1)
+                        )
+                        time.sleep(sleep_time)
+                        retries += 1
+                        continue
+                    raise OneDriveRateLimitError(int(retry_after) if retry_after else None)
+
                 if response.status_code in RETRYABLE_STATUSES and retries < self.max_retries:
-                    print(f"Got retryable status {response.status_code}, retrying...")
                     sleep_time = self.backoff_factor * (2 ** retries) + random.uniform(0, 1)
                     time.sleep(sleep_time)
                     retries += 1
@@ -126,25 +153,30 @@ class OneDriveApiClient:
                         error_msg = error_data.get("error", {}).get("message", response.text)
                     except:
                         pass
-                    print(f"Request failed with status {response.status_code}: {error_msg}")
-                    raise OneDriveClientRequestFailedError(response.status_code, error_msg)
+
+                    if response.status_code == 404:
+                        raise OneDriveNotFoundError("Resource", endpoint)
+                    elif response.status_code == 401:
+                        raise OneDriveAuthError(error_msg)
+                    elif response.status_code >= 500:
+                        raise OneDriveServerError(error_msg)
+                    else:
+                        raise OneDriveRequestError(response.status_code, error_msg)
 
                 try:
                     return response.json()
                 except Exception as e:
-                    print(f"Failed to parse JSON response: {str(e)}")
                     return response.text
 
             except requests.exceptions.RequestException as e:
-                print(f"Request exception: {str(e)}")
                 if retries < self.max_retries:
                     sleep_time = self.backoff_factor * (2 ** retries) + random.uniform(0, 1)
                     time.sleep(sleep_time)
                     retries += 1
                     continue
-                raise OneDriveClientRequestFailedError(500, str(e))
+                raise OneDriveServerError(f"Request failed: {str(e)}")
 
-        raise OneDriveClientRequestFailedError(500, "Max retries exceeded")
+        raise OneDriveServerError("Max retries exceeded")
 
     def get(
         self,

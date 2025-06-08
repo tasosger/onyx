@@ -78,8 +78,11 @@ class OneDriveApiClient:
                 raise OneDriveRateLimitError(int(retry_after) if retry_after else None)
             
             if response.status_code != 200:
-                error_data = response.json()
-                error_msg = error_data.get("error", {}).get("message", response.text)
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get("error", {}).get("message", response.text)
+                except (ValueError, AttributeError):
+                    error_msg = response.text
                 if response.status_code == 401:
                     raise OneDriveAuthError(error_msg)
                 raise OneDriveRequestError(response.status_code, error_msg)

@@ -6,6 +6,7 @@ from onyx.chat.models import LlmDoc
 from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.stream_processing.utils import DocumentIdOrderMapping
 from onyx.configs.chat_configs import STOP_STREAM_PAT
+from onyx.configs.constants import DocumentSource
 from onyx.prompts.constants import TRIPLE_BACKTICK
 from onyx.utils.logger import setup_logger
 
@@ -152,10 +153,9 @@ class CitationProcessor:
 
                 # Get the page-specific link if available
                 link = context_llm_doc.link
-                if context_llm_doc.source_links and context_llm_doc.source_type == DocumentSource.PDF:
+                if context_llm_doc.source_links and context_llm_doc.source_type == DocumentSource.FILE:
                     # Extract page number from the content around the citation
-                    # This is a simple heuristic - you may want to improve this based on your needs
-                    content_before = self.llm_out[max(0, self.past_cite_count - 500):self.past_cite_count]
+                    content_before = self.llm_out[max(0, len(self.llm_out) - 500):len(self.llm_out)]
                     current_page = self.current_page_numbers.get(context_llm_doc.document_id, 1)
                     
                     # Try to find a page number in the nearby content
@@ -199,20 +199,15 @@ class CitationProcessor:
                     prev_length = len(self.curr_segment)
                     self.curr_segment = (
                         self.curr_segment[: start + length_to_add]
-                        + f"[[{displayed_citation_num}]]()"  # use the value that was displayed to user
+                        + f"[[{displayed_citation_num}]]"  # use the value that was displayed to user
                         + self.curr_segment[end + length_to_add :]
                     )
                     length_to_add += len(self.curr_segment) - prev_length
 
-                last_citation_end = end + length_to_add
-
-            if last_citation_end > 0:
-                result += self.curr_segment[:last_citation_end]
-                self.curr_segment = self.curr_segment[last_citation_end:]
-
-        if not possible_citation_found:
-            result += self.curr_segment
-            self.curr_segment = ""
-
-        if result:
-            yield OnyxAnswerPiece(answer_piece=result)
+            if self.curr_segment:
+                yield OnyxAnswerPiece(answer_piece=self.curr_segment)
+                self.curr_segment = ""
+        elif possible_citation_found is None:
+            if self.curr_segment:
+                yield OnyxAnswerPiece(answer_piece=self.curr_segment)
+                self.curr_segment = ""

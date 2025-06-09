@@ -221,84 +221,38 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
 def read_pdf_file(
     file: IO[Any], pdf_pass: str | None = None, extract_images: bool = False
 ) -> tuple[list[tuple[str, int]], dict, list[tuple[bytes, str]]]:
+    """Extract text from a PDF file.
+    Returns:
+        - List of (text, page_number) tuples
+        - Metadata dictionary
+        - List of (image_bytes, image_name) tuples
     """
-    Returns a list of (text, page_number) tuples, basic PDF metadata, and optionally extracted images.
-    """
-    metadata: dict[str, Any] = {}
-    extracted_images: list[tuple[bytes, str]] = []
-    text_chunks: list[tuple[str, int]] = []
-    
     try:
-        pdf_reader = PdfReader(file)
+        reader = PdfReader(file, password=pdf_pass)
+        metadata = reader.metadata or {}
+        images: list[tuple[bytes, str]] = []
+        text_by_page: list[tuple[str, int]] = []
 
-        if pdf_reader.is_encrypted and pdf_pass is not None:
-            decrypt_success = False
-            try:
-                decrypt_success = pdf_reader.decrypt(pdf_pass) != 0
-            except Exception:
-                logger.error("Unable to decrypt pdf")
+        for page_num, page in enumerate(reader.pages, start=1):
+            text = page.extract_text()
+            if text:
+                text_by_page.append((text.strip(), page_num))
 
-            if not decrypt_success:
-                return [], metadata, []
-        elif pdf_reader.is_encrypted:
-            logger.warning("No Password for an encrypted PDF, returning empty text.")
-            return [], metadata, []
+            if extract_images:
+                try:
+                    for image in page.images:
+                        images.append((image.data, image.name))
+                except Exception as e:
+                    logger.warning(f"Failed to extract images from page {page_num}: {e}")
 
-        # Basic PDF metadata
-        if pdf_reader.metadata is not None:
-            for key, value in pdf_reader.metadata.items():
-                clean_key = key.lstrip("/")
-                if isinstance(value, str) and value.strip():
-                    metadata[clean_key] = value
-                elif isinstance(value, list) and all(
-                    isinstance(item, str) for item in value
-                ):
-                    metadata[clean_key] = ", ".join(value)
+        return text_by_page, metadata, images
 
-        # Extract text page by page
-        for page_num, page in enumerate(pdf_reader.pages):
-            page_text = page.extract_text()
-            if page_text.strip():  # Only add non-empty pages
-                text_chunks.append((page_text, page_num + 1))  # Use 1-based page numbers
-
-        # Store page-specific links in metadata
-        if "base_url" in metadata:
-            base_url = metadata["base_url"]
-            page_links = {}
-            for page_num in range(len(pdf_reader.pages)):
-                # Create page-specific URL by appending page parameter
-                if "#page=" not in base_url and "?page=" not in base_url:
-                    separator = "&" if "?" in base_url else "?"
-                    page_links[page_num + 1] = f"{base_url}{separator}page={page_num + 1}"
-                else:
-                    # If URL already has a page parameter, replace it
-                    if "#page=" in base_url:
-                        base_without_page = base_url.split("#page=")[0]
-                        page_links[page_num + 1] = f"{base_without_page}#page={page_num + 1}"
-                    else:
-                        base_without_page = base_url.split("?page=")[0]
-                        page_links[page_num + 1] = f"{base_without_page}?page={page_num + 1}"
-            metadata["page_links"] = page_links
-
-        if extract_images:
-            for page_num, page in enumerate(pdf_reader.pages):
-                for image_file_object in page.images:
-                    image = Image.open(io.BytesIO(image_file_object.data))
-                    img_byte_arr = io.BytesIO()
-                    image.save(img_byte_arr, format=image.format)
-                    img_bytes = img_byte_arr.getvalue()
-
-                    image_name = (
-                        f"page_{page_num + 1}_image_{image_file_object.name}."
-                        f"{image.format.lower() if image.format else 'png'}"
-                    )
-                    extracted_images.append((img_bytes, image_name))
-
-        return text_chunks, metadata, extracted_images
-
+    except PdfStreamError as e:
+        if "password" in str(e).lower():
+            raise ValueError("PDF is password protected") from e
+        raise e
     except Exception as e:
-        logger.error(f"Error reading PDF: {e}")
-        return [], metadata, extracted_images
+        raise ValueError(f"Failed to read PDF: {e}") from e
 
 
 def docx_to_text_and_images(

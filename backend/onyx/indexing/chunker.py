@@ -18,6 +18,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import clean_text
 from onyx.utils.text_processing import shared_precompare_cleanup
 from shared_configs.configs import STRICT_CHUNK_TOKEN_LIMIT
+import re
 
 # Not supporting overlaps, we need a clean combination of chunks and it is unclear if overlaps
 # actually help quality at all
@@ -192,37 +193,56 @@ class Chunker:
             return self.mini_chunk_splitter.split_text(chunk_text)
         return None
 
-    # ADDED: extra param image_url to store in the chunk
     def _create_chunk(
         self,
         document: IndexingDocument,
         chunks_list: list[DocAwareChunk],
         text: str,
-        links: dict[int, str],
         is_continuation: bool = False,
         title_prefix: str = "",
         metadata_suffix_semantic: str = "",
         metadata_suffix_keyword: str = "",
         image_file_name: str | None = None,
     ) -> None:
-        """
-        Helper to create a new DocAwareChunk, append it to chunks_list.
-        """
-        new_chunk = DocAwareChunk(
+        """Creates a chunk from the given text and adds it to the chunks list."""
+        if not text.strip():
+            return
+
+        # Get the blurb from the first chunk only
+        blurb = self._extract_blurb(text) if not is_continuation else ""
+
+        # Handle page-specific links for PDFs
+        source_links = {}
+        if document.source_type == DocumentSource.FILE and document.metadata.get("page_links"):
+            # Extract page numbers from the text using regex
+            page_matches = re.finditer(r'(?:page|p\.?)\s*(\d+)', text.lower())
+            page_links = document.metadata["page_links"]
+            
+            for match in page_matches:
+                try:
+                    page_num = int(match.group(1))
+                    if page_num in page_links:
+                        # Store the offset and the page-specific link
+                        source_links[match.start()] = page_links[page_num]
+                except ValueError:
+                    continue
+
+        chunk = DocAwareChunk(
             source_document=document,
             chunk_id=len(chunks_list),
-            blurb=self._extract_blurb(text),
+            blurb=blurb,
             content=text,
-            source_links=links or {0: ""},
+            source_links=source_links,
             image_file_name=image_file_name,
             section_continuation=is_continuation,
             title_prefix=title_prefix,
             metadata_suffix_semantic=metadata_suffix_semantic,
             metadata_suffix_keyword=metadata_suffix_keyword,
+            large_chunk_reference_ids=None,
             mini_chunk_texts=self._get_mini_chunk_texts(text),
             large_chunk_id=None,
         )
-        chunks_list.append(new_chunk)
+        chunks_list.append(chunk)
 
     def _chunk_document(
         self,
@@ -284,11 +304,11 @@ class Chunker:
                         document,
                         chunks,
                         chunk_text,
-                        link_offsets,
-                        is_continuation=False,
-                        title_prefix=title_prefix,
-                        metadata_suffix_semantic=metadata_suffix_semantic,
-                        metadata_suffix_keyword=metadata_suffix_keyword,
+                        False,
+                        title_prefix,
+                        metadata_suffix_semantic,
+                        metadata_suffix_keyword,
+                        image_url,
                     )
                     chunk_text = ""
                     link_offsets = {}
@@ -299,11 +319,11 @@ class Chunker:
                     document,
                     chunks,
                     section_text,
-                    links={0: section_link_text} if section_link_text else {},
-                    image_file_name=image_url,
-                    title_prefix=title_prefix,
-                    metadata_suffix_semantic=metadata_suffix_semantic,
-                    metadata_suffix_keyword=metadata_suffix_keyword,
+                    False,
+                    title_prefix,
+                    metadata_suffix_semantic,
+                    metadata_suffix_keyword,
+                    image_url,
                 )
                 # Continue to next section
                 continue
@@ -318,11 +338,11 @@ class Chunker:
                         document,
                         chunks,
                         chunk_text,
-                        link_offsets,
                         False,
                         title_prefix,
                         metadata_suffix_semantic,
                         metadata_suffix_keyword,
+                        None,
                     )
                     chunk_text = ""
                     link_offsets = {}
@@ -343,22 +363,22 @@ class Chunker:
                                 document,
                                 chunks,
                                 small_chunk,
-                                {0: section_link_text} if section_link_text else {},
-                                is_continuation=(j != 0),
-                                title_prefix=title_prefix,
-                                metadata_suffix_semantic=metadata_suffix_semantic,
-                                metadata_suffix_keyword=metadata_suffix_keyword,
+                                False,
+                                title_prefix,
+                                metadata_suffix_semantic,
+                                metadata_suffix_keyword,
+                                None,
                             )
                     else:
                         self._create_chunk(
                             document,
                             chunks,
                             split_text,
-                            {0: section_link_text} if section_link_text else {},
-                            is_continuation=(i != 0),
-                            title_prefix=title_prefix,
-                            metadata_suffix_semantic=metadata_suffix_semantic,
-                            metadata_suffix_keyword=metadata_suffix_keyword,
+                            False,
+                            title_prefix,
+                            metadata_suffix_semantic,
+                            metadata_suffix_keyword,
+                            None,
                         )
                 continue
 
@@ -380,11 +400,11 @@ class Chunker:
                     document,
                     chunks,
                     chunk_text,
-                    link_offsets,
                     False,
                     title_prefix,
                     metadata_suffix_semantic,
                     metadata_suffix_keyword,
+                    None,
                 )
                 # start a new chunk with the page-specific link
                 link_offsets = {0: section_link_text} if section_link_text else {}
@@ -396,11 +416,11 @@ class Chunker:
                 document,
                 chunks,
                 chunk_text,
-                link_offsets or {0: ""},  # safe default
                 False,
                 title_prefix,
                 metadata_suffix_semantic,
                 metadata_suffix_keyword,
+                None,
             )
         return chunks
 

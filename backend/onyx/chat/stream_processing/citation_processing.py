@@ -39,6 +39,7 @@ class CitationProcessor:
         self.hold = ""
         self.current_citations: list[int] = []
         self.past_cite_count = 0
+        self.current_page_numbers: dict[str, int] = {}  # Maps document_id to current page number
 
     def process_token(
         self, token: str | None
@@ -149,7 +150,30 @@ class CitationProcessor:
                         )
                     continue
 
+                # Get the page-specific link if available
                 link = context_llm_doc.link
+                if context_llm_doc.source_links and context_llm_doc.source_type == DocumentSource.PDF:
+                    # Extract page number from the content around the citation
+                    # This is a simple heuristic - you may want to improve this based on your needs
+                    content_before = self.llm_out[max(0, self.past_cite_count - 500):self.past_cite_count]
+                    current_page = self.current_page_numbers.get(context_llm_doc.document_id, 1)
+                    
+                    # Try to find a page number in the nearby content
+                    page_matches = re.finditer(r'(?:page|p\.?)\s*(\d+)', content_before.lower())
+                    last_page_match = None
+                    for last_page_match in page_matches:
+                        pass
+                    
+                    if last_page_match:
+                        try:
+                            current_page = int(last_page_match.group(1))
+                            self.current_page_numbers[context_llm_doc.document_id] = current_page
+                        except ValueError:
+                            pass
+                    
+                    # Use the page-specific link if available for this page
+                    if current_page in context_llm_doc.source_links:
+                        link = context_llm_doc.source_links[current_page]
 
                 self.past_cite_count = len(self.llm_out)
                 self.current_citations.append(final_citation_num)

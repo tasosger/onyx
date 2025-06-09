@@ -223,17 +223,26 @@ def _process_file(
     embedded_images: list[tuple[bytes, str]] = []
 
     # Extract text and images from the file
-    text_content, embedded_images = extract_text_and_images(
+    result, embedded_images = extract_text_and_images(
         file=file,
         file_name=file_name,
         pdf_pass=pdf_pass,
     )
 
-    # Build sections: first the text as a single Section
+    # Build sections based on file type
     sections: list[TextSection | ImageSection] = []
-    link_in_meta = metadata.get("link")
-    if text_content.strip():
-        sections.append(TextSection(link=link_in_meta, text=text_content.strip()))
+    link_in_meta = metadata.get("link", "")
+
+    # Special handling for PDFs to create page-specific sections
+    if file_name.lower().endswith('.pdf') and isinstance(result, list):
+        for page_text, page_num in result:
+            if page_text.strip():
+                page_link = f"{link_in_meta}#page={page_num}" if link_in_meta else ""
+                sections.append(TextSection(link=page_link, text=page_text.strip()))
+    else:
+        # Handle all other file types as before
+        if isinstance(result, str) and result.strip():
+            sections.append(TextSection(link=link_in_meta, text=result.strip()))
 
     # Then any extracted images from docx, etc.
     for idx, (img_data, img_name) in enumerate(embedded_images, start=1):

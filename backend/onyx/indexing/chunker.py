@@ -343,7 +343,7 @@ class Chunker:
                                 document,
                                 chunks,
                                 small_chunk,
-                                {0: section_link_text},
+                                {0: section_link_text} if section_link_text else {},
                                 is_continuation=(j != 0),
                                 title_prefix=title_prefix,
                                 metadata_suffix_semantic=metadata_suffix_semantic,
@@ -354,7 +354,7 @@ class Chunker:
                             document,
                             chunks,
                             split_text,
-                            {0: section_link_text},
+                            {0: section_link_text} if section_link_text else {},
                             is_continuation=(i != 0),
                             title_prefix=title_prefix,
                             metadata_suffix_semantic=metadata_suffix_semantic,
@@ -386,8 +386,8 @@ class Chunker:
                     metadata_suffix_semantic,
                     metadata_suffix_keyword,
                 )
-                # start a new chunk
-                link_offsets = {0: section_link_text}
+                # start a new chunk with the page-specific link
+                link_offsets = {0: section_link_text} if section_link_text else {}
                 chunk_text = section_text
 
         # finalize any leftover text chunk

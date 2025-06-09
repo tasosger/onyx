@@ -42,8 +42,9 @@ class LlmDoc(BaseModel):
     metadata: dict[str, str | list[str]]
     updated_at: datetime | None
     link: str | None
+    # source_links maps page numbers to URLs for PDFs, or other source-specific links
     source_links: dict[int, str] | None
-    match_highlights: list[str] | None
+    match_highlights: list[str] | None = None
 
 
 class SubQuestionIdentifier(BaseModel):

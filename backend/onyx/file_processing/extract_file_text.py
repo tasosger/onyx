@@ -12,6 +12,7 @@ from typing import Any
 from typing import IO
 from typing import List
 from typing import Tuple
+from typing import Union
 
 import chardet
 import docx  # type: ignore
@@ -219,12 +220,14 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
 
 def read_pdf_file(
     file: IO[Any], pdf_pass: str | None = None, extract_images: bool = False
-) -> tuple[str, dict, list[tuple[bytes, str]]]:
+) -> tuple[list[tuple[str, int]], dict, list[tuple[bytes, str]]]:
     """
-    Returns the text, basic PDF metadata, and optionally extracted images.
+    Returns a list of (text, page_number) tuples, basic PDF metadata, and optionally extracted images.
     """
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
+    text_chunks: list[tuple[str, int]] = []
+    
     try:
         pdf_reader = PdfReader(file)
 
@@ -236,10 +239,10 @@ def read_pdf_file(
                 logger.error("Unable to decrypt pdf")
 
             if not decrypt_success:
-                return "", metadata, []
+                return [], metadata, []
         elif pdf_reader.is_encrypted:
             logger.warning("No Password for an encrypted PDF, returning empty text.")
-            return "", metadata, []
+            return [], metadata, []
 
         # Basic PDF metadata
         if pdf_reader.metadata is not None:
@@ -252,9 +255,30 @@ def read_pdf_file(
                 ):
                     metadata[clean_key] = ", ".join(value)
 
-        text = TEXT_SECTION_SEPARATOR.join(
-            page.extract_text() for page in pdf_reader.pages
-        )
+        # Extract text page by page
+        for page_num, page in enumerate(pdf_reader.pages):
+            page_text = page.extract_text()
+            if page_text.strip():  # Only add non-empty pages
+                text_chunks.append((page_text, page_num + 1))  # Use 1-based page numbers
+
+        # Store page-specific links in metadata
+        if "base_url" in metadata:
+            base_url = metadata["base_url"]
+            page_links = {}
+            for page_num in range(len(pdf_reader.pages)):
+                # Create page-specific URL by appending page parameter
+                if "#page=" not in base_url and "?page=" not in base_url:
+                    separator = "&" if "?" in base_url else "?"
+                    page_links[page_num + 1] = f"{base_url}{separator}page={page_num + 1}"
+                else:
+                    # If URL already has a page parameter, replace it
+                    if "#page=" in base_url:
+                        base_without_page = base_url.split("#page=")[0]
+                        page_links[page_num + 1] = f"{base_without_page}#page={page_num + 1}"
+                    else:
+                        base_without_page = base_url.split("?page=")[0]
+                        page_links[page_num + 1] = f"{base_without_page}?page={page_num + 1}"
+            metadata["page_links"] = page_links
 
         if extract_images:
             for page_num, page in enumerate(pdf_reader.pages):
@@ -270,14 +294,11 @@ def read_pdf_file(
                     )
                     extracted_images.append((img_bytes, image_name))
 
-        return text, metadata, extracted_images
+        return text_chunks, metadata, extracted_images
 
-    except PdfStreamError:
-        logger.exception("Invalid PDF file")
-    except Exception:
-        logger.exception("Failed to read PDF")
-
-    return "", metadata, []
+    except Exception as e:
+        logger.error(f"Error reading PDF: {e}")
+        return [], metadata, extracted_images
 
 
 def docx_to_text_and_images(
@@ -430,56 +451,53 @@ def extract_text_and_images(
     file: IO[Any],
     file_name: str,
     pdf_pass: str | None = None,
-) -> Tuple[str, List[Tuple[bytes, str]]]:
+) -> tuple[Union[str, list[tuple[str, int]]], list[tuple[bytes, str]]]:
     """
     Primary new function for the updated connector.
-    Returns (text_content, [(embedded_img_bytes, embedded_img_name), ...]).
+    For PDFs, returns a list of (text, page_number) tuples and embedded images.
+    For other files, returns (text_content, [(embedded_img_bytes, embedded_img_name), ...]).
     """
-
     try:
         # Attempt unstructured if env var is set
         if get_unstructured_api_key():
             # If the user doesn't want embedded images, unstructured is fine
             file.seek(0)
             text_content = unstructured_to_text(file, file_name)
-            return (text_content, [])
+            return text_content, []
 
         extension = get_file_ext(file_name)
 
-        # docx example for embedded images
+        # Special handling for PDFs to preserve page information
+        if extension == ".pdf":
+            file.seek(0)
+            text_chunks, _, images = read_pdf_file(file, pdf_pass, extract_images=True)
+            return text_chunks, images
+
+        # Handle all other file types exactly as before
         if extension == ".docx":
             file.seek(0)
             text_content, images = docx_to_text_and_images(file)
-            return (text_content, images)
+            return text_content, images
 
-        # PDF example: we do not show complicated PDF image extraction here
-        # so we simply extract text for now and skip images.
-        if extension == ".pdf":
-            file.seek(0)
-            text_content, _, images = read_pdf_file(file, pdf_pass, extract_images=True)
-            return (text_content, images)
-
-        # For PPTX, XLSX, EML, etc., we do not show embedded image logic here.
-        # You can do something similar to docx if needed.
         if extension == ".pptx":
             file.seek(0)
-            return (pptx_to_text(file), [])
+            return pptx_to_text(file), []
 
         if extension == ".xlsx":
             file.seek(0)
-            return (xlsx_to_text(file), [])
+            return xlsx_to_text(file), []
 
         if extension == ".eml":
             file.seek(0)
-            return (eml_to_text(file), [])
+            return eml_to_text(file), []
 
         if extension == ".epub":
             file.seek(0)
-            return (epub_to_text(file), [])
+            return epub_to_text(file), []
 
         if extension == ".html":
             file.seek(0)
-            return (parse_html_page_basic(file), [])
+            return parse_html_page_basic(file), []
 
         # If we reach here and it's a recognized text extension
         if is_text_file_extension(file_name):
@@ -488,16 +506,16 @@ def extract_text_and_images(
             text_content_raw, _ = read_text_file(
                 file, encoding=encoding, ignore_onyx_metadata=False
             )
-            return (text_content_raw, [])
+            return text_content_raw, []
 
         # If it's an image file or something else, we do not parse embedded images from them
         # just return empty text
         file.seek(0)
-        return ("", [])
+        return "", []
 
     except Exception as e:
         logger.exception(f"Failed to extract text/images from {file_name}: {e}")
-        return ("", [])
+        return "", []
 
 
 def convert_docx_to_txt(
